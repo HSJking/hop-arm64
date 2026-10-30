@@ -1,0 +1,49 @@
+name: Windows ARM64 install smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Successful Windows ARM64 build run ID
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: windows-11-arm
+    timeout-minutes: 15
+    steps:
+      - name: Download installer
+        uses: actions/download-artifact@v4
+        with:
+          name: HOP-windows-arm64-nsis
+          run-id: ${{ inputs.build_run_id }}
+          github-token: ${{ github.token }}
+          path: installer
+      - name: Install and start HOP
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installer = Get-ChildItem installer -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not found' }
+          $destination = Join-Path $env:RUNNER_TEMP 'hop-arm64-smoke'
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$destination" -PassThru -Wait
+          if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode)" }
+          $exe = Get-ChildItem $destination -Filter 'hop-desktop.exe' -Recurse | Select-Object -First 1
+          if (-not $exe) { throw 'Installed application not found' }
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          $offset = [BitConverter]::ToInt32($bytes, 0x3c)
+          if ([BitConverter]::ToUInt32($bytes, $offset) -ne 0x4550 -or [BitConverter]::ToUInt16($bytes, $offset + 4) -ne 0xaa64) { throw 'Installed application is not ARM64' }
+          $process = Start-Process -FilePath $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru
+          try {
+            Start-Sleep -Seconds 20
+            $process.Refresh()
+            if ($process.HasExited) { throw "HOP exited during startup with code $($process.ExitCode)" }
+            Write-Host 'ARM64 application remained running for 20 seconds.'
+          } finally {
+            if (-not $process.HasExited) { Stop-Process -Id $process.Id -Force }
+          }
