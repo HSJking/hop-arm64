@@ -116,3 +116,16 @@ pnpm upstream:verify
 * [upstream 경계와 업데이트 방식](architecture/UPSTREAM.md)
 * [rhwp 업데이트 운영 매뉴얼](operations/RHWP_UPDATE.md)
 * [데스크톱 릴리즈 노트](operations/DESKTOP_RELEASE.md)
+## Windows ARM64
+
+Windows ARM64 빌드는 `.github/workflows/windows-arm64.yml`의 수동 실행으로 테스트 및 NSIS 설치 파일을 생성합니다. 네이티브 Windows ARM64 환경에서 Node.js 24, Corepack/pnpm, Visual Studio의 ARM64 C++ 빌드 도구와 WebView2를 준비하고, 저장소 서브모듈을 초기화한 뒤 다음 명령을 사용합니다.
+
+```powershell
+rustup toolchain install 1.93.1 --profile minimal --target aarch64-pc-windows-msvc
+$env:RUSTUP_TOOLCHAIN = '1.93.1'
+corepack enable
+pnpm install --frozen-lockfile
+pnpm --filter hop-desktop tauri build --target aarch64-pc-windows-msvc --bundles nsis
+```
+
+설치 파일은 `apps/desktop/src-tauri/target/aarch64-pc-windows-msvc/release/bundle/nsis/`에 생성됩니다. 앱 실행 파일은 ARM64로 빌드되지만 NSIS 설치 프로그램 자체는 x86 에뮬레이션으로 실행됩니다. 이 빌드는 별도 CI 산출물이며 기존 자동 업데이트 릴리즈에는 포함되지 않습니다.
